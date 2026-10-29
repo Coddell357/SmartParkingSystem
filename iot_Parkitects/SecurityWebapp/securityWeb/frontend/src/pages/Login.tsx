@@ -1,70 +1,57 @@
 //(rudderz243,2026)
 //(Vincent,2016)
+
 import React, { useState } from "react";
 import parkitechlogo from "../assets/parkitechlogo.png";
 import { useNavigate } from "react-router-dom";
 
-
-//Firebase imports for authentication
-/*Firebase, 2026*/ 
-import {signInWithEmailAndPassword, signOut} from "firebase/auth"; 
-import {auth} from "../config/firebase";
-
+// Firebase imports for authentication
+/*Firebase, 2026*/
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../config/firebase";
 
 export const Login: React.FC = () => {
   const [username, setUsername] = useState("");
-
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false); //eye
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [selectedRole, setSelectedRole] = useState<"admin" | "security">(
+    "security"
+  );
 
-const navigate = useNavigate();//navigates to the dashboard page after successful login
+  const navigate = useNavigate();
 
-//this handles the login form submission and authentication process
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  // Handles login and authentication.
+  const handleSubmit = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
+    setError("");
 
-    setError(""); //This is used to clear any previous error messages
-
-    //Used to check if both the username and password fields are completed before allowing the user to login
-    if (!username || !password) {
+    // Check that both fields have been completed.
+    if (!username.trim() || !password) {
       setError("Please enter your username and password.");
       return;
     }
 
-    try{
+    try {
+      // Verify the user's credentials with Firebase.
+      await signInWithEmailAndPassword(auth, username.trim(), password);
 
-      /*Firebase, 2026*/ 
-      //Calls Firebase authentication function to verify the user's credentials
-      const userCredential = await signInWithEmailAndPassword(
-         auth,
-         username, 
-         password
-      );
+      // Store the selected role for dashboard navigation.
+      sessionStorage.setItem("userRole", selectedRole);
 
-      //(Stack Overflow, 2021)
-      //this reads the role stored in the user's firebase token
-      const token = await userCredential.user.getIdTokenResult(true);
-
-      //only security personnel can log in here
-      if(token.claims.role !== "security") {
-        await signOut(auth); //this signOut logs students/lecturers out
-        setError("This portal is for security personnel only.");
-        return;
-      }
-        navigate("/dashboard");
-    } catch (error: any) {
-      //displays the error message 
-      console.error("Login error:", error);
-      setError("Invalid username or password. Please try again.");
+      // Navigate to the dashboard after successful login.
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Login failed:", error);
+      setError("Invalid email or password. Please try again.");
     }
-   
   };
 
   return (
     <main className="login-page">
       <div className="login-card">
-
         {/* Logo */}
         <div className="login-brand">
           <div className="login-brand-mark">
@@ -85,9 +72,38 @@ const navigate = useNavigate();//navigates to the dashboard page after successfu
 
         <hr />
 
-        {/* Form */}
+        {/* Login form */}
         <form onSubmit={handleSubmit} className="login-form">
+          {/* Role selection */}
+<div className="login-field">
+  <label>Login as</label>
 
+  <div className="role-selection">
+    <button
+      type="button"
+      className="login-button"
+      style={{
+        opacity: selectedRole === "admin" ? 1 : 0.6,
+        marginBottom: 0,
+      }}
+      onClick={() => setSelectedRole("admin")}
+    >
+      Admin
+    </button>
+
+    <button
+      type="button"
+      className="login-button"
+      style={{
+        opacity: selectedRole === "security" ? 1 : 0.6,
+        marginBottom: 0,
+      }}
+      onClick={() => setSelectedRole("security")}
+    >
+      Security
+    </button>
+  </div>
+</div>
           {/* Username */}
           <div className="login-field">
             <label htmlFor="username">
@@ -103,11 +119,12 @@ const navigate = useNavigate();//navigates to the dashboard page after successfu
             <input
               id="username"
               className="login-input"
-              type="text"
+              type="email"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
               placeholder="Enter your email"
+              required
             />
           </div>
 
@@ -123,35 +140,33 @@ const navigate = useNavigate();//navigates to the dashboard page after successfu
               )}
             </label>
 
-          <div className="password-input-container">
-            <input
-              id="password"
-              className="login-input"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              placeholder="Enter your password"
-            />
+            <div className="password-input-container">
+              <input
+                id="password"
+                className="login-input"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                required
+              />
 
               <button
-                  type="button"
-                  className="password-toggle"
-                  onMouseDown={() => setShowPassword(true)}
-                  onMouseUp={() => setShowPassword(false)}
-                  onMouseLeave={() => setShowPassword(false)}
-                  onTouchStart={() => setShowPassword(true)}
-                  onTouchEnd={() => setShowPassword(false)}
-                  aria-label="Hold to show password"
-                >
-                  <i
-                    className="fa fa-eye"
-                    aria-hidden="true"
-                  />
+                type="button"
+                className="password-toggle"
+                onMouseDown={() => setShowPassword(true)}
+                onMouseUp={() => setShowPassword(false)}
+                onMouseLeave={() => setShowPassword(false)}
+                onTouchStart={() => setShowPassword(true)}
+                onTouchEnd={() => setShowPassword(false)}
+                aria-label="Hold to show password"
+              >
+                <i className="fa fa-eye" aria-hidden="true" />
               </button>
+            </div>
           </div>
 
-          </div>
           {/* Error message */}
           {error && (
             <p className="login-error" role="alert">
@@ -165,29 +180,30 @@ const navigate = useNavigate();//navigates to the dashboard page after successfu
           <button
             className="login-button"
             type="submit"
-            disabled={!username || !password}
+            disabled={!username.trim() || !password}
           >
             LOGIN
           </button>
-
         </form>
 
-        <p className="login-footer">
-          Parkitech Security System
-        </p>
-
+        <p className="login-footer">Parkitech Security System</p>
       </div>
     </main>
   );
 };
 
 export default Login;
-{
 
-}
 /* References
-Firebase, 2026. Get Started with Firebase Authentication in React Native. [source code] Available: <https://firebase.google.com/docs/auth/web/start> [Accessed 30 August. 2026].
-Rudderz243, 2026. Frontend tsx. [source code] Available: <http://github.com/rudderz243/insy7314-library/blob/master/frontend/src/pages/BookPage.tsx> [Accessed 12 August. 2026].
-Stack Overflow. 2021.How to use the getIdToken() auth method in firebase version 9? (Version 2.0) [Source code] Available at:<https://stackoverflow.com/questions/70490182/how-to-use-the-getidtoken-auth-method-in-firebase-version-9> [Accessed 3 October 2026].
-Vincent,M. 2016. login / sign up - React - Daily UI #001. (Version 2.0) [Source code] Available at: < https://codepen.io/matthewvincent/pen/JXOKbY > [Accessed 12 August. 2026]. 
+Firebase, 2026. Get Started with Firebase Authentication in React Native.
+[source code] Available: https://firebase.google.com/docs/auth/web/start
+[Accessed 30 August 2026].
+
+Rudderz243, 2026. Frontend tsx.
+[source code] Available: https://github.com/rudderz243/insy7314-library/blob/master/frontend/src/pages/BookPage.tsx
+[Accessed 12 August 2026].
+
+Vincent, M., 2016. Login / Sign Up - React - Daily UI #001.
+[source code] Available: https://codepen.io/matthewvincent/pen/JXOKbY
+[Accessed 12 August 2026].
 */

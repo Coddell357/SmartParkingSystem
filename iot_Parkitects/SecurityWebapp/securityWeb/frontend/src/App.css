@@ -243,3 +243,131 @@
 }
 
 
+
+/* Security registration page */
+.security-register-form {
+  padding-top: 8px;
+}
+
+.register-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.register-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.register-field label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.register-field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color, #dce3e7);
+  border-radius: 8px;
+  background: var(--input-background, #fff);
+  color: inherit;
+  font: inherit;
+}
+
+.register-field input:focus {
+  outline: 2px solid #0b5d6b;
+  outline-offset: 2px;
+}
+
+.register-password {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.register-password input {
+  flex: 1;
+}
+
+.register-requirements {
+  margin-top: 26px;
+  padding: 18px;
+  border-radius: 10px;
+  background: var(--surface-secondary, #f5f8f9);
+}
+
+.register-requirements p {
+  margin-top: 0;
+}
+
+.register-requirement-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  font-size: 0.9rem;
+}
+
+.register-requirement-list span {
+  color: #687781;
+}
+
+.register-requirement-list span.valid {
+  color: #16805d;
+}
+
+.register-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color, #e1e7ea);
+}
+
+.register-form-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+  .register-form-grid,
+  .register-requirement-list {
+    grid-template-columns: 1fr;
+  }
+
+  .register-form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .register-form-actions button {
+    width: 100%;
+  }
+}
+.login-role-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.login-role-button {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: white;
+  color: #333;
+  cursor: pointer;
+  font: inherit;
+}
+
+.login-role-button.active {
+  background: #087f8c;
+  border-color: #087f8c;
+  color: white;
+}

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+
+import React, { useState } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -6,9 +7,6 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
-//(Firebase, 2026)/
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "./config/firebase";
 
 import { SideBar } from "./components/SideBar";
 import { TopBar } from "./components/TopBar";
@@ -20,39 +18,44 @@ import { TicketResponsesPage } from "./pages/TicketResponsesPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Login } from "./pages/Login";
+import { Register } from "./pages/Register";
+import { SecurityList } from "./pages/SecurityList";
+import { EditSecurity } from "./pages/EditSecurity";
 
-//(Hanss, 2022)
-// Only lets security personnel login, everyone else is sent to /login page 
-const RequireSecurity: React.FC<{ children: React.ReactElement }> = ({ children }) => {
-  //(Bratslavsky, 2025)
-  const [state, setState] = useState<"loading" | "ok" | "no">("loading");
+type UserRole = "admin" | "security";
 
-  //checks if the user is logged into firebase
-  useEffect(() => {
-    return onAuthStateChanged(auth, async (user) => {
-      //if there is no logged in user, access is denied
-      if (!user) {
-        setState("no");
-        return;
-      }
-      const token = await user.getIdTokenResult();
-      //only users with the security role (created by the admin) are allowed to access the system
-      setState(token.claims.role === "security" ? "ok" : "no");
-    });                                                                                                                                       
-  }, []);
+const RequireRole: React.FC<{
+  children: React.ReactElement;
+  allowedRoles: UserRole[];
+}> = ({ children, allowedRoles }) => {
+  const role = sessionStorage.getItem("userRole") as UserRole | null;
 
-  //(Amour, 2026)
-  if (state === "loading") return null;
-  return state === "ok" ? children : <Navigate to="/login" replace />;
+  if (!role || !allowedRoles.includes(role)) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
 };
 
+const RequireSecurityOrAdmin: React.FC<{
+  children: React.ReactElement;
+}> = ({ children }) => (
+  <RequireRole allowedRoles={["admin", "security"]}>
+    {children}
+  </RequireRole>
+);
+
+const RequireAdmin: React.FC<{
+  children: React.ReactElement;
+}> = ({ children }) => (
+  <RequireRole allowedRoles={["admin"]}>
+    {children}
+  </RequireRole>
+);
 
 const AppContent: React.FC = () => {
   const location = useLocation();
-
-  // const isLoginPage = location.pathname === "/login";
-  const isLoginPage =
-  location.pathname === "/login";
+  const isLoginPage = location.pathname === "/login";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
@@ -63,85 +66,117 @@ const AppContent: React.FC = () => {
           : `app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`
       }
     >
-
-      {/* dont show sidebar when on login */}
-      {!isLoginPage && <SideBar
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />}
+      {!isLoginPage && (
+        <SideBar
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+      )}
 
       <div className={isLoginPage ? "" : "workspace"}>
-
-          {/* dont show topbar when on login */}
         {!isLoginPage && <TopBar />}
 
         <main className={isLoginPage ? "" : "page-wrap"}>
           <Routes>
-            {/* Login */}
+            <Route path="/login" element={<Login />} />
+
+            {/* Only administrators can register security personnel. */}
             <Route
-              path="/login"
-              element={<Login />}
+              path="/register"
+              element={
+                <RequireAdmin>
+                  <Register />
+                </RequireAdmin>
+              }
             />
 
-            {/* Dashboard //only security userscan access the dashboard*/}
-            
+            {/* Only administrators can view and manage security personnel. */}
+            <Route
+              path="/security-list"
+              element={
+                <RequireAdmin>
+                  <SecurityList />
+                </RequireAdmin>
+              }
+            />
+
+            <Route
+              path="/security-list/:id/edit"
+              element={
+                <RequireAdmin>
+                  <EditSecurity />
+                </RequireAdmin>
+              }
+            />
+
+            {/* Both administrators and security personnel can access these pages. */}
             <Route
               path="/dashboard"
-              element={<RequireSecurity><BookPage /></RequireSecurity>}
+              element={
+                <RequireSecurityOrAdmin>
+                  <BookPage />
+                </RequireSecurityOrAdmin>
+              }
             />
 
-           
             <Route
               path="/tickets"
-              element={<RequireSecurity><TicketsPage /></RequireSecurity>}
+              element={
+                <RequireSecurityOrAdmin>
+                  <TicketsPage />
+                </RequireSecurityOrAdmin>
+              }
             />
 
             <Route
               path="/responses"
-              element={<RequireSecurity><TicketResponsesPage /></RequireSecurity>}
+              element={
+                <RequireSecurityOrAdmin>
+                  <TicketResponsesPage />
+                </RequireSecurityOrAdmin>
+              }
             />
 
             <Route
               path="/analytics"
-              element={<RequireSecurity><AnalyticsPage /></RequireSecurity>}
+              element={
+                <RequireSecurityOrAdmin>
+                  <AnalyticsPage />
+                </RequireSecurityOrAdmin>
+              }
             />
 
             <Route
               path="/settings"
-              element={<RequireSecurity><SettingsPage /></RequireSecurity>}
+              element={
+                <RequireSecurityOrAdmin>
+                  <SettingsPage />
+                </RequireSecurityOrAdmin>
+              }
             />
 
-            {/* Backend health */}
             <Route
               path="/health"
-              element={<RequireSecurity><HealthCheckPage /></RequireSecurity>}
+              element={
+                <RequireSecurityOrAdmin>
+                  <HealthCheckPage />
+                </RequireSecurityOrAdmin>
+              }
             />
 
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
-
           </Routes>
         </main>
-
       </div>
     </div>
   );
 };
 
-export const App: React.FC = () => {
-  return (
-    <BrowserRouter>
-      <AppContent />
-    </BrowserRouter>
-  );
-};
+export const App: React.FC = () => (
+  <BrowserRouter>
+    <AppContent />
+  </BrowserRouter>
+);
 
 export default App;
-{/*
-  References
-  Amour, D. 2026. Protecting an Admin Page in React Using JWT + Route Guards. (Version 2.0) [Source code] Available at:<https://www.paxium.co.uk/LinkedInArticles/AuthorisationInReact> [Accessed 3 October 2026].
-  Bratslavsky, P. 2025. Mastering React useState Hook: A Full Guide with Best Practices. (Version 2.0) [Source code]. Available at:<https://strapi.io/blog/react-usestate-hook-guide-best-practices> [Accessed 3 October 2026].
-  Firebase, 2026. Get Started with Firebase Authentication in React Native. [source code] Available: <https://firebase.google.com/docs/auth/web/start> [Accessed 30 August. 2026].
-  Hanss, A. 2022. How to Use React.FC Children Prop in React 18 with TypeScript. (Version 2.0) [Source code]. Available at:<https://plainenglish.io/react/how-to-use-react-fc-children-prop-in-react-18-with-typescript-6ab7b2c901ce> [Accessed 3 October 2026].
-  rudderz243.2026. rudderz243/insy7314-library.  (Version 2.0) [Source code]. Available at: <https://github.com/rudderz243/insy7314-library> [Accessed 17 Aug. 2026].
-           */}
