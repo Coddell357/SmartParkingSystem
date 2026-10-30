@@ -3,8 +3,12 @@
 // This is our pin setup. We are using the DFRobot Firebeetle 2 ESP32-C6 board on port 7 to flash the esp
 #include <Arduino.h>
 #include <WiFi.h> // ESP32 wifi driver library (Espressif Systems, 2023b)
-#include "esp_wpa2.h" // WPA2 Enterprise Library
+#include "esp_wpa2.h" // WPA2 Enterprise Library for campus network authentication
 #include <Firebase_ESP_Client.h> // Firebase RTDB Client (Mobizt, 2023)
+#include <HTTPClient.h> // Required for REST API communication
+#include <WiFiClientSecure.h> // Required for Azure HTTPS encrypted connections
+#include <time.h> // C standard library for Network Time Protocol (NTP) time synchronization
+// Firebase uses strict SSL security. The ESP32 needs to know the current date and time to validate those security certificates, otherwise the connection is rejected
 
 // BLE Headers that will be needed for our FindMyCar feature (Espressif Systems, 2023a)
 #include <BLEDevice.h>
@@ -24,11 +28,11 @@
 #define API_KEY "AIzaSyDbL55frdOhcMZPmW3HiUFhBb7AWbj6Nwg"
 #define DATABASE_URL "https://wil-smartparking-default-rtdb.firebaseio.com"
 
-// API
-#include <HTTPClient.h>
-#define API_BASE "http://10.115.234.12:8080"
+// Now uses Azure backend API
+#define API_BASE "https://backend220261005181032-a2a2dccackbwbzgx.southafricanorth-01.azurewebsites.net"
 
 // BLE unique id for the mobile app link
+// Prevents the mobile app from connecting to random Bluetooth devices (it will only look for this exact ID of the Firebeetle)
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 
 // Firebase core objects (Mobizt, 2023)
@@ -43,17 +47,45 @@ int lastDistBay1 = -1;
 bool lastStateBay2 = false;
 int lastDistBay2 = -1;
 
-// this is for the first parking sensor + LED
-const int TRIG_PIN = 5;  // using pin 5 because pin 4 was found faulty on esp (didnt send trigger correctly unless I held it securely with my finger - cracked solder)
-const int ECHO_PIN = 7;
+// this is for the first parking sensor 1 + LED 1
+const int TRIG_PIN = 4;
+const int ECHO_PIN = 15; // Updated to different pin because GPIO 7 was faulty
 const int RED_PIN = 2;
 const int GREEN_PIN = 3;
 
-// this is for the second sensor + LED
+// this is for the second sensor 2 + LED 2
 const int TRIG_PIN_2 = 6;
 const int ECHO_PIN_2 = 8;
 const int RED_PIN_2 = 9;
 const int GREEN_PIN_2 = 18;
+
+// For Firebase SSL
+// This validates SSL certificates by defining the current date and time
+// Firebase will block any incoming data if the device sending it claims the year is 1970 (the default boot time)
+void syncClock() {
+  configTime(2 * 3600, 0, "pool.ntp.org", "time.nist.gov"); // SAST Timezone
+  Serial.print("Waiting for NTP time sync: ");
+  time_t now = time(nullptr);
+  int retry = 0;
+
+  // Loops until valid epoch time is retrieved (post-2023) or retry limit is hit
+  while (now < 1700000000 && retry < 30) {
+    delay(500);
+    Serial.print(".");
+    now = time(nullptr);
+    
+    retry++;
+  }
+
+  if (now >= 1700000000) 
+  {
+      Serial.println("\nTime synchronized successfully.");
+  } 
+  else 
+  {
+      Serial.println("\nWARNING: NTP time synchronization failed.");
+  }
+}
 
 void setup() {
   Serial.begin(115200); // Initializes serial communication at 115200 bits per second
@@ -101,6 +133,9 @@ void setup() {
   Serial.print("ESP32 IP Address: ");
   Serial.println(WiFi.localIP());
 
+  // Syncs time before Firebase initailizes (prevents SSL errors)
+  syncClock();
+
   // Bluetooth beacon section
   // BLE Setup (Espressif Systems, 2023a)
   Serial.println("Initializing BLE Server...");
@@ -118,8 +153,15 @@ void setup() {
 
   // Firebase section
   // Configures Firebase API Key and Realtime Database URL (Mobizt, 2023)
+  // Uses anonymous authentication so the hardware node doesnt need a dedicated user account to write to the database
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
+  config.token_status_callback = tokenStatusCallback;
+
+   // Sets memory buffer limits to ensure quick operations
+  // Allocates enough RAM so data packets dont crash the ESP32
+  fbdo.setResponseSize(1024);
+  fbdo.setBSSLBufferSize(4096, 1024);
 
   // Registers anonymous credentials to use token for communication (Mobizt, 2023)
   if (Firebase.signUp(&config, &auth, "", "")) 
@@ -131,36 +173,41 @@ void setup() {
     Serial.printf("Firebase Auth Error: %s\n", config.signer.signupError.message.c_str());
   }
 
-  config.token_status_callback = tokenStatusCallback;
-  
-  // Sets memory buffer limits to ensure quick operations
-  fbdo.setResponseSize(1024);
-  fbdo.setBSSLBufferSize(1024, 512);
-
   // Starts the Firebase client services (Mobizt, 2023)
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
   
   delay(1000); 
-  Serial.println("Starting Distance Test with Bay 1 & 2's sensors...");
+  Serial.println("Starting Distance Measuring with Bay 1 & 2's sensors...");
 
 }
 
+// This pushes distance data directly to our Azure C# backend needed for our analytics dashboard
 void postTelemetry(int sensorId, int distanceCm, bool occupied) {
-  if (WiFi.status() != WL_CONNECTED) return;
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    return;
+  }
+  
   HTTPClient http;
   http.begin(String(API_BASE) + "/api/Parking/sensor/telemetry");
+
+  http.setTimeout(3000); // Forces the ESP32 to drop the connection after 3 seconds instead of default 30s to prevent system freezing (keeps the sensor loop fast)
+  
   http.addHeader("Content-Type", "application/json");
   String body = "{\"sensorID\":" + String(sensorId) +
                 ",\"distanceReadingCm\":" + String(distanceCm) +
                 ",\"isOccupied\":" + (occupied ? "true" : "false") + "}";
+  
   int code = http.POST(body);
   Serial.printf("[API] sensor %d -> HTTP %d\n", sensorId, code);
-  http.end();
+  
+  http.end(); // Closes connection to free up memory
 }
 
 // Created this function to trigger, read and display the occupancy status for either of the 2 bays
-void processBay(int trigPin, int echoPin, int redPin, int greenPin, String bayId, bool &lastState, int &lastDist) {
+// We use one reusable function and pass the pin numbers into it, instead of writing this code twice for both sensors
+void processBay(int trigPin, int echoPin, int redPin, int greenPin, String bayId, int sensorId bool &lastState, int &lastDist) {
   // Clears and sends a pulse (Arduino, 2023b)
   // This fires the trigger
   digitalWrite(trigPin, LOW); // Clears the trigger pin by setting the voltage to LOW (Arduino, 2023b)
@@ -176,22 +223,17 @@ void processBay(int trigPin, int echoPin, int redPin, int greenPin, String bayId
   int currentDistance = 0;
   bool isCurrentlyOccupied = false;
 
-  // Logic for the RGB LEDs to turn green when parking spot is available (specified distance) or red when occupied (passed the specified distance)
-  // 0 represents a timeout from the sensors 20cm blind spot, meaning the bay is occupied
+  // Failsafe logic incase a wire is loose or sensor not responding
   if (duration == 0) 
   {
-    Serial.println(bayId + " Status: Occupied");
-    isCurrentlyOccupied = true;
-    currentDistance = 0;
-    // Turns the red light ON (LOW) and green OFF (HIGH) (Arduino, 2023b)
-    digitalWrite(redPin, LOW);
-    digitalWrite(greenPin, HIGH);
-  } 
+    Serial.println(bayId + " Status: NO ECHO - check wiring");
+    return;
+  }
   else 
   {
     // Calculates speed of sound (Random Nerd Tutorials, 2019)
     currentDistance = duration * 0.034 / 2;
-    isCurrentlyOccupied = (currentDistance <= 60);
+    isCurrentlyOccupied = (currentDistance <= 30); // 30cm occupation threshold
   }
 
   // LED section
@@ -214,35 +256,43 @@ void processBay(int trigPin, int echoPin, int redPin, int greenPin, String bayId
   bool distanceShifted = (abs(currentDistance - lastDist) >= 4);
   bool firstRun = (lastDist == -1);
 
-  if ((stateChanged || distanceShifted) && Firebase.ready()) 
+  if ((stateChanged || distanceShifted || firstRun)
   {
     lastState = isCurrentlyOccupied;
     lastDist = currentDistance;
 
-    String basePath = "/ParkingLots/Lot_A/nodes/Node_01/bays/" + bayId;
-    FirebaseJson json; // Creates structured JSON object for batch transmission (Mobizt, 2023)
+    // Sends data to API using the HTTP handler
+    postTelemetry(sensorId, currentDistance, isCurrentlyOccupied);
 
-    json.set("status", isCurrentlyOccupied ? "Occupied" : "Available");
-    json.set("distanceCm", currentDistance);
-    json.set("isLive", true);
+    // Sends realtime state to Firebase for mobile app
+    if (Firebase.ready()) 
+    {
+      String basePath = "/ParkingLots/Lot_A/nodes/Node_01/bays/" + bayId;
+      FirebaseJson json; 
 
-    // Leaves user identifier ready for mobile app handshake
-    if (stateChanged || firstRun) 
-    {
-      json.set("occupiedByUserId", isCurrentlyOccupied ? "Anonymous" : "None");
-    }
+      // Constructs Firebase payload
+      json.set("status", isCurrentlyOccupied ? "Occupied" : "Available");
+      json.set("distanceCm", currentDistance);
+      json.set("isLive", true);
 
-    // Pushes all fields in one single network packet to avoid ESP32 freezing (Mobizt, 2023)
-    if (Firebase.RTDB.updateNode(&fbdo, basePath, &json)) 
-    {
-      Serial.printf("[%s] Live Sync: %s (%d cm)\n", bayId.c_str(), isCurrentlyOccupied ? "Occupied" : "Available", currentDistance);
-    } 
-    else 
-    {
-      Serial.printf("[%s] Sync Error: %s\n", bayId.c_str(), fbdo.errorReason().c_str());
-    }
+      // Only overwrites the user ID if the state just changed
+      // If a user linked to a bay through the mobile app, we dont want to accidentally overwrite their ID with 'Anonymous' just because the distance shifted by 5cm
+      if (stateChanged || firstRun) 
+      {
+        json.set("occupiedByUserId", isCurrentlyOccupied ? "Anonymous" : "None");
+      }
+  
+      // Pushes all fields in one single network packet to avoid ESP32 freezing (Mobizt, 2023)
+      if (Firebase.RTDB.updateNode(&fbdo, basePath, &json)) 
+      {
+        Serial.printf("[%s] Live Sync: %s (%d cm)\n", bayId.c_str(), isCurrentlyOccupied ? "Occupied" : "Available", currentDistance);
+      } 
+      else 
+      {
+        Serial.printf("[%s] Sync Error: %s\n", bayId.c_str(), fbdo.errorReason().c_str());
+      }
   }
-
+  }
 }
 
 void loop() {
@@ -252,12 +302,12 @@ void loop() {
   // 50ms time allows the physical ultrasonic reflections to clear before triggering the next sensor
   delay(50);
   
-  // Runs rhe scan for Bay 2
+  // Runs the scan for Bay 2
   processBay(TRIG_PIN_2, ECHO_PIN_2, RED_PIN_2, GREEN_PIN_2, "Bay2", lastStateBay2, lastDistBay2);
   
   Serial.println("-------------------------");
   
-  delay(250);
+  delay(150);
 
 }
 
