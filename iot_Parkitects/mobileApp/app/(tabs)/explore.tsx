@@ -1,5 +1,5 @@
 //(Withfra.me, 2022)
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   SafeAreaView,
@@ -111,6 +111,20 @@ export default function Example() {
     }, [])
   );
 
+  // Recovers the camera photo if Android restarted the app while the camera was open
+  useEffect(() => {
+    (async () => {
+      try {
+        const pending = await ImagePicker.getPendingResultAsync();
+        if (pending && 'assets' in pending && pending.assets?.length) {
+          setForm(prev => ({ ...prev, imageUri: pending.assets[0].uri }));
+        }
+      } catch (error) {
+        console.error('Failed to recover pending image result', error);
+      }
+    })();
+  }, []);
+
   // Jayasekara, 2025 - handler keeping the form synced on value change
   const handleBayChange = (val: any) => {
     const selectedValue = typeof val === 'function' ? val(value) : val;
@@ -139,13 +153,13 @@ export default function Example() {
 
 
     const result = await ImagePicker.launchImageLibraryAsync({ // user Explore the result
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.7,
     });
 
     // User cancelelled action
     if (!result.canceled) {
-      setForm({ ...form, imageUri: result.assets[0].uri });
+      setForm(prev => ({ ...prev, imageUri: result.assets[0].uri }));
     }
   };
 
@@ -162,7 +176,7 @@ export default function Example() {
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.7,
     });
 
@@ -610,6 +624,6 @@ const styles = StyleSheet.create({
  * Hiếu, N.H.2022. react-native: upload image - DEV Community.(Version 10.0) [Source code] Available at:< https://dev.to/hieunh1801/react-native-upload-file-1860 > [Accessed 30 August 2026].
  * Jayasekara, S.S. 2025. How to Add a Dropdown Picker in React Native Expo (iOS & Android Compatible). (Version 10.0) [Source code] Available at:< https://sasandasaumya.medium.com/how-to-add-a-dropdown-picker-in-react-native-expo-ios-android-compatible-4944c66f58c7 > [Accessed 1 Sept. 2026].
  * Kindacode.com.2022. Using Image Picker and Camera in React Native (Expo) - KindaCode. (Version 10.0) [Source code] Available at:< https://www.kindacode.com/article/image-picker-in-react-native > [Accessed 30 Aug. 2026].
- * Sanja.2022. How to upload a photo in React, create a FormData object (with the image file and string data types), send it to the NodeJS server, save it in MongoDB and fetch it from React and render it on a page. (Version 10.0) [Source code] Available at:< https://medium.com/@sanja1mandic/how-to-upload-a-photo-in-react-create-a-formdata-object-with-image-file-and-string-data-types-71e9e08fb53c > [Accessed 30 Aug. 2026].
+ * Sanja.2022. How to upload a photo in React, create a FormData object (with the image file and string data types), send it to the NodeJS server, save it in MongoDB and fetch it from React and render it on a page. (Version 10.0) [Source code] Available at:< https://medium.com/@sanja1mandic/how-to-upload-a-photo-in-react-create-a-formdata-object-with-image-file-and-string-data-types-71e9e08fb53c > [Accessed 1 Sept. 2026].
  * Withfra.me. 2022. Ready to Use React Native Components - WithFrame | withfra.me. (Version 10.0) [Source code] Available at:<https://withfra.me/components > [Accessed 17 August 2026].
  */
