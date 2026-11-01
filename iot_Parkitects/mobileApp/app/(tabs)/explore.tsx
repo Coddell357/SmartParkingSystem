@@ -206,7 +206,7 @@ export default function Example() {
     } as any);
 
     try {
-      // BASE API URL at the moment it is YOUR wifi network:8000
+     
       const response = await fetch(`${API_BASE_URL}/api/Tickets/upload-image`, {
         method: 'POST',
         headers: {
@@ -272,7 +272,7 @@ export default function Example() {
 
     try {
       //fetching network if network does not match network API it will give an error alert on the network
-      const response = await fetch(`${API_BASE_URL}/api/Tickets`,// BASE API URL at the moment it is YOUR wifi network:8000
+      const response = await fetch(`${API_BASE_URL}/api/Tickets`,
         {
           method: 'POST',
           headers: {
