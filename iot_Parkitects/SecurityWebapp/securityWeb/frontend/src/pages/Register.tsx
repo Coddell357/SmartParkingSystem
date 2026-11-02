@@ -130,7 +130,7 @@ if (!response.ok) {
       } else if (error.code === "auth/weak-password") {
         setError("Password is too weak. Please choose a stronger password.");
       } else {
-        setError("Registration failed. Please try again.");
+        setError(error.message || "Registration failed. Please try again.");
       }
     }
   };
