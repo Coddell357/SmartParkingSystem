@@ -5,9 +5,10 @@
 
 #include <Arduino.h>
 #include <WiFi.h> // (Espressif Systems, 2023)
-#include "esp_wpa2.h" // WPA2 Enterprise Library
+#include "esp_eap_client.h" // WPA2 Enterprise Library
 #include <Firebase_ESP_Client.h> // (Mobizt, 2023)
 #include <LiquidCrystal.h> // (Arduino, 2023b)
+#include <time.h>
 
 // Helper headers needed for Firebase token generation (Mobizt, 2023)
 #include "addons/TokenHelper.h"
@@ -34,6 +35,30 @@ FirebaseConfig config;
 const int TOTAL_SPOTS = 350;
 const int MOCK_OCCUPIED_SPOTS = 348;
 unsigned long lastDatabasePoll = 0;
+
+// Syncs ESP32 clock with NTP to prevent Firebase SSL rejections (taken from Parking Sensor Node code)
+void syncClock() {
+  configTime(2 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("Waiting for NTP time sync: ");
+  time_t now = time(nullptr);
+  int retry = 0;
+
+  while (now < 1700000000 && retry < 30) {
+    delay(500);
+    Serial.print(".");
+    now = time(nullptr);
+    retry++;
+  }
+
+  if (now >= 1700000000) 
+  {
+    Serial.println("\nTime synchronized successfully.");
+  } 
+  else 
+  {
+    Serial.println("\nWARNING: NTP time synchronization failed.");
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -83,6 +108,8 @@ void setup() {
   lcd.setCursor(0, 1);
   lcd.print("Wifi Connected! ");
 
+  syncClock();
+
   // Firebase section
   // Initializes Firebase (Mobizt, 2023)
   config.api_key = API_KEY;
@@ -99,28 +126,28 @@ void setup() {
 
   config.token_status_callback = tokenStatusCallback;
   fbdo.setResponseSize(1024);
+  fbdo.setBSSLBufferSize(4096, 1024);
   
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
   
-  delay(2000); 
+  delay(1500); 
   lcd.clear();
-
 }
 
 // Created this function to handle the UI display on the LCD (Arduino, 2023b)
-void updateDisplay(int available) {
+void updateDisplay(int totalOccupied) {
   lcd.setCursor(0, 0);
   lcd.print("Spots Available:");
   
   lcd.setCursor(0, 1);
-  if (available <= 0) 
+  if (totalOccupied <= TOTAL_SPOTS) 
   {
      lcd.print("LOT FULL!       ");
   } 
   else 
   {
-     lcd.print(available);
+     lcd.print(totalOccupied);
      lcd.print(" / ");
      lcd.print(TOTAL_SPOTS);
      lcd.print("        "); 
@@ -140,24 +167,25 @@ void loop() {
       // Checks Bay 1's Status (Mobizt, 2023)
       if (Firebase.RTDB.getString(&fbdo, "/ParkingLots/Lot_A/nodes/Node_01/bays/Bay1/status")) 
       {
-        if (fbdo.stringData() == "Available") 
+        if (fbdo.stringData() == "Occupied") 
         {
-          liveAvailable++;
+          liveOccupied++;
         }
       }
 
       // Checks Bay 2's Status (Mobizt, 2023)
       if (Firebase.RTDB.getString(&fbdo, "/ParkingLots/Lot_A/nodes/Node_01/bays/Bay2/status")) 
       {
-        if (fbdo.stringData() == "Available") 
+        if (fbdo.stringData() == "Occupied") 
         {
-          liveAvailable++;
+          liveOccupied++;
         }
       }
 
-      int totalAvailable = liveAvailable;
+      // Total Occupied = Total mock spots (248) + live occupied
+      int totalOccupied = MOCK_OCCUPIED_SPOTS + liveOccupied;
       
-      Serial.printf("Live Free: %d/2 | Total Free: %d/%d\n", liveAvailable, totalAvailable, TOTAL_SPOTS);
+      Serial.printf("Live Occupied: %d/2 | Total Lot Occupancy: %d/%d\n", liveOccupied, totalOccupied, TOTAL_SPOTS);
       updateDisplay(totalAvailable);
     }
   }
