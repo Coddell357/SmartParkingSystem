@@ -179,6 +179,20 @@ The mobile application can retrieve the user's profile information through the b
 
 The user's name is also used to dynamically generate the initials displayed in the Home screen profile avatar.
 
+## 👮 Security Personnel Management
+
+The security web application provides an administrative module for managing the personnel ecosystem.
+
+Administrators can interact with the web interface to:
+
+- Register new security officers.
+
+- View a comprehensive list of registered personnel.
+
+- Edit existing personnel details (such as employee numbers and shift assignments).
+
+- Delete personnel records.
+
 ---
 
 ## ⚙️ User Settings
