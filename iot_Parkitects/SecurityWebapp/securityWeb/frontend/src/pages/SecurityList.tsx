@@ -1,29 +1,64 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  deleteMockPerson,
-  getMockPersonnel,
-  type SecurityPerson,
-} from "../services/securityPersonnelMock";
+
+const API_URL = import.meta.env.VITE_API_URL;
+
+export interface SecurityPerson {
+  userId: number;
+  userNumber: string;
+  name: string;
+  email: string;
+  employeeNumber: string;
+  assignedShift: string;
+}
 
 export const SecurityList: React.FC = () => {
-  const [personnel, setPersonnel] = useState<SecurityPerson[]>(
-    () => getMockPersonnel()
-  );
+  const [personnel, setPersonnel] = useState<SecurityPerson[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const handleDelete = (person: SecurityPerson) => {
+  // Fetch all security personnel on component mount
+  useEffect(() => {
+    fetchPersonnel();
+  }, []);
+
+  const fetchPersonnel = async () => {
+    try {
+      const response = await fetch(`${API_URL}/SecurityPersonnel`);
+      if (!response.ok) throw new Error("Failed to fetch security personnel.");
+      const data = await response.json();
+      setPersonnel(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (person: SecurityPerson) => {
     const confirmed = window.confirm(
       `Delete ${person.name} from the security personnel list?`
     );
 
     if (!confirmed) return;
 
-    deleteMockPerson(person.userId);
-    setPersonnel(getMockPersonnel());
-    setError("");
+    try {
+      const response = await fetch(`${API_URL}/SecurityPersonnel/${person.userId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || "Failed to delete personnel.");
+      }
+
+      // Remove the deleted person from the local state
+      setPersonnel((prev) => prev.filter((p) => p.userId !== person.userId));
+      setError("");
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   return (
@@ -60,7 +95,9 @@ export const SecurityList: React.FC = () => {
           </p>
         )}
 
-        {personnel.length === 0 ? (
+        {loading ? (
+          <p>Loading security personnel...</p>
+        ) : personnel.length === 0 ? (
           <p>No security personnel records found.</p>
         ) : (
           <div className="table-wrap">
@@ -90,9 +127,7 @@ export const SecurityList: React.FC = () => {
                           className="button secondary"
                           type="button"
                           onClick={() =>
-                            navigate(
-                              `/security-list/${person.userId}/edit`
-                            )
+                            navigate(`/security-list/${person.userId}/edit`)
                           }
                         >
                           Edit

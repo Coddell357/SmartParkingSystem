@@ -56,10 +56,33 @@ namespace backend2.Controllers
             return Ok(personnel);
         }
 
+        // GET: api/SecurityPersonnel/{id}
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var person = await _context.SecurityPersonnel
+                .Where(p => p.UserId == id)
+                .Select(p => new
+                {
+                    p.UserId,
+                    p.FirebaseUid,
+                    p.UserNumber,
+                    p.Name,
+                    p.Email,
+                    p.EmployeeNumber,
+                    p.AssignedShift
+                })
+                .FirstOrDefaultAsync();
+
+            if (person == null)
+                return NotFound("Security personnel record not found.");
+
+            return Ok(person);
+        }
+
         // POST: api/SecurityPersonnel
         [HttpPost]
-        public async Task<IActionResult> Create(
-            [FromBody] CreateSecurityPersonnelDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateSecurityPersonnelDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.FirebaseUid) ||
                 string.IsNullOrWhiteSpace(dto.UserNumber) ||
@@ -73,51 +96,41 @@ namespace backend2.Controllers
 
             var email = dto.Email.Trim();
 
-            if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute()
-                    .IsValid(email))
+            if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(email))
             {
                 return BadRequest("Please provide a valid email address.");
             }
 
-            var uidExists = await _context.Users
-                .AnyAsync(u => u.FirebaseUid == dto.FirebaseUid);
+            var uidExists = await _context.Users.AnyAsync(u => u.FirebaseUid == dto.FirebaseUid);
+            if (uidExists) return Conflict("This Firebase account is already registered.");
 
-            if (uidExists)
-                return Conflict("This Firebase account is already registered.");
+            var userNumberExists = await _context.Users.AnyAsync(u => u.UserNumber == dto.UserNumber);
+            if (userNumberExists) return Conflict("This user number is already registered.");
 
-            var userNumberExists = await _context.Users
-                .AnyAsync(u => u.UserNumber == dto.UserNumber);
+            var employeeNumberExists = await _context.SecurityPersonnel.AnyAsync(p => p.EmployeeNumber == dto.EmployeeNumber);
+            if (employeeNumberExists) return Conflict("This employee number is already registered.");
 
-            if (userNumberExists)
-                return Conflict("This user number is already registered.");
-
-            var employeeNumberExists = await _context.SecurityPersonnel
-                .AnyAsync(p => p.EmployeeNumber == dto.EmployeeNumber);
-
-            if (employeeNumberExists)
-                return Conflict("This employee number is already registered.");
-
-            var person = new SecurityPersonnel
+            try
             {
-                FirebaseUid = dto.FirebaseUid.Trim(),
-                UserNumber = dto.UserNumber.Trim(),
-                Name = dto.Name.Trim(),
-                Email = email,
-                UserRole = "Security",
-                EmployeeNumber = dto.EmployeeNumber.Trim(),
-                AssignedShift = dto.AssignedShift.Trim(),
-                IsParked = false,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.SecurityPersonnel.Add(person);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(
-                nameof(GetAll),
-                new { id = person.UserId },
-                new
+                var person = new SecurityPersonnel
                 {
+                 FirebaseUid = dto.FirebaseUid.Trim(),
+                    UserNumber = dto.UserNumber.Trim(),
+                    Name = dto.Name.Trim(),
+                    Email = email,
+                    UserRole = "Security",
+                    EmployeeNumber = dto.EmployeeNumber.Trim(),
+                    AssignedShift = dto.AssignedShift.Trim(),
+                    IsParked = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.SecurityPersonnel.Add(person);
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    message = "Security personnel registered successfully.",
                     person.UserId,
                     person.UserNumber,
                     person.Name,
@@ -125,6 +138,16 @@ namespace backend2.Controllers
                     person.EmployeeNumber,
                     person.AssignedShift
                 });
+            }
+            catch (DbUpdateException dbEx)
+            {
+                var sqlError = dbEx.InnerException?.Message ?? dbEx.Message;
+                return StatusCode(500, $"SQL Insert Failed: {sqlError}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Server Error: {ex.Message}");
+            }
         }
 
         // PUT: api/SecurityPersonnel/5
