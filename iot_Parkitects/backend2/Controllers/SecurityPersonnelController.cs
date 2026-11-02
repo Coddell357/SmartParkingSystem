@@ -114,7 +114,7 @@ namespace backend2.Controllers
             {
                 var person = new SecurityPersonnel
                 {
-                 FirebaseUid = dto.FirebaseUid.Trim(),
+                    FirebaseUid = dto.FirebaseUid.Trim(),
                     UserNumber = dto.UserNumber.Trim(),
                     Name = dto.Name.Trim(),
                     Email = email,
