@@ -38,6 +38,9 @@
 
 The system combines **mobile technology, IoT/BLE communication, cloud services, RESTful APIs, a relational database and a security management web application** to provide a connected parking experience.
 
+Find our Demo Video here:
+https://youtu.be/w3g6sElP0p0?si=XZcfjseTuo_iVkfB
+
 The system is designed around two main user experiences:
 
 ### 👤 Parking Users
